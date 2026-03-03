@@ -5,6 +5,10 @@ env:
   DEFAULT_WEBSITE_URL: 'https://owaspblt.org'
   DEFAULT_KEYWORD: 'OWASP'
 
+concurrency:
+  group: website-monitor
+  cancel-in-progress: true
+
 on:
   push:
   schedule:
@@ -23,16 +27,16 @@ on:
 # Set the permissions for the workflow
 permissions:
   contents: write
-  pull-requests: write
   pages: write
   id-token: write
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for all branches and tags
 
@@ -63,8 +67,8 @@ jobs:
 
             # Monitor the website
             start_time=$(date +%s%3N)
-            content=$(curl -s "$url")
-            response_code=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+            content=$(curl -s --fail --max-time 15 --retry 2 "$url" || true)
+            response_code=$(curl -s --fail --max-time 15 --retry 2 -o /dev/null -w "%{http_code}" "$url" || echo "000")
             end_time=$(date +%s%3N)
             duration_ms=$((end_time - start_time))
             duration_s=$(awk "BEGIN {printf \"%.3f\", $duration_ms/1000}")
@@ -127,7 +131,7 @@ jobs:
           if [ -n "${{ github.event.inputs.website_url }}" ]; then
             # Manual trigger - use provided values
             start_time=$(date +%s%3N)
-            content=$(curl -s "${{ github.event.inputs.website_url }}")
+            content=$(curl -s --fail --max-time 15 --retry 2 "${{ github.event.inputs.website_url }}" || true)
             end_time=$(date +%s%3N)
             duration_ms=$((end_time - start_time))
 
@@ -174,15 +178,14 @@ jobs:
 
       - name: Notify Slack on failure
         if: steps.monitor.outputs.has_failures == 'true'
-        uses: slackapi/slack-github-action@v1.24.0
+        uses: slackapi/slack-github-action@v2.1.1
         with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
             {
               "text": "⚠️ Website Monitor Alert\nOne or more monitors detected issues:\n${{ steps.monitor.outputs.failed_monitors }}\nMonitor Dashboard: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
