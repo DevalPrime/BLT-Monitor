@@ -22,7 +22,7 @@ on:
 
 concurrency:
   group: website-monitor-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 # Set the permissions for the workflow
 permissions:
@@ -33,7 +33,7 @@ permissions:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
             local response_body_file=""
 
             response_body_file=$(mktemp)
-            if fetched_code=$(curl -sS --fail --max-time 15 --retry 2 --retry-all-errors -o "$response_body_file" -w "%{http_code}" "$target_url"); then
+            if fetched_code=$(curl -sS --fail --max-time 15 --retry 2 -o "$response_body_file" -w "%{http_code}" "$target_url"); then
               fetched_content=$(cat "$response_body_file")
             else
               echo "Warning: failed to fetch content from $target_url"
